@@ -37,7 +37,6 @@
             home-manager.extraSpecialArgs = {
               inherit user;
               herdrPkgs = herdr.packages;
-              homeManagerPkg = null;
             };
             home-manager.users.${user} = import ./home.nix;
           }

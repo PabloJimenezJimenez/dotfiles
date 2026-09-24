@@ -1,14 +1,17 @@
-{ config, pkgs, lib, user, herdrPkgs, homeManagerPkg ? null, ... }:
+{ config, pkgs, lib, user, herdrPkgs, ... }@args:
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
   isLinux = pkgs.stdenv.isLinux;
+  # optional args cannot use `?` defaults: the module system resolves every
+  # functionArg via _module.args and bypasses them. Read from @args instead.
+  homeManagerPkg = args.homeManagerPkg or null;
 in
 
 {
   home.username = user;
   home.homeDirectory =
-    if pkgs.stdenv.isDarwin then "/Users/${user}" else "/home/${user}";
+    if isLinux then "/home/${user}" else "/Users/${user}";
   home.stateVersion = "24.11";
   home.packages = (with pkgs; [
     # cli i use constantly
@@ -22,7 +25,7 @@ in
     nerd-fonts.hack
   ]) ++ [
     # Herdr, from its own flake (same source on Mac and Linux).
-    herdrPkgs.${pkgs.system}.default
+    herdrPkgs.${pkgs.stdenv.hostPlatform.system}.default
   ] ++ lib.optionals isLinux (with pkgs; [
     # On macOS these two come from Homebrew casks instead.
     wezterm
