@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Takes a fresh Mac from nothing to a built nix-darwin config.
+# Takes a fresh Mac or Linux box from nothing to a built nix config.
 # Run this once. After it finishes, use ./rebuild.sh for every later change.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+OS="$(uname -s)"
 
-echo "==> Step 1: Determinate Nix"
+echo "==> Step 1: Nix"
 if command -v nix >/dev/null 2>&1; then
   echo "    nix already installed, skipping"
 else
@@ -15,12 +16,23 @@ else
   . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 fi
 
-echo "==> Step 2: symlink this repo to ~/.dotfiles"
+echo "==> Step 2: enable flakes + nix-command"
+# Determinate does this by default; a bare Nix install may not.
+mkdir -p "$HOME/.config/nix"
+NIX_CONF="$HOME/.config/nix/nix.conf"
+if ! grep -q 'experimental-features' "$NIX_CONF" 2>/dev/null; then
+  echo "experimental-features = nix-command flakes" >> "$NIX_CONF"
+  echo "    added experimental-features to $NIX_CONF"
+else
+  echo "    already configured, skipping"
+fi
+
+echo "==> Step 3: symlink this repo to ~/.dotfiles"
 # home.nix resolves its mkOutOfStoreSymlink paths through ~/.dotfiles, so this
 # has to exist before the first switch or the build will fail to find them.
 ln -sfn "$DIR" ~/.dotfiles
 
-echo "==> Step 3: personalize the configured username"
+echo "==> Step 4: personalize the configured username"
 # Do this before any sudo call: sudo resets $USER to root, so whoami has to
 # run as the real interactive user first.
 REAL_USER="$(whoami)"
@@ -33,7 +45,13 @@ elif [ "$FLAKE_USER" != "$REAL_USER" ]; then
   echo "    flake.nix is configured for user \"$FLAKE_USER\", but you are \"$REAL_USER\"."
   read -r -p "    Rewrite flake.nix's \"user = \" line to \"$REAL_USER\"? [y/N] " REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-    sed -i '' -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
+    # Portable in-place sed: GNU sed (Linux) takes -i with no argument,
+    # BSD sed (macOS) takes -i with an empty argument.
+    if sed --version >/dev/null 2>&1; then
+      sed -i -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
+    else
+      sed -i '' -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
+    fi
     echo "    Updated. Review the change with: git diff flake.nix"
   else
     echo "    Skipped. Edit the single \"user = \" line in flake.nix yourself before continuing."
@@ -43,20 +61,33 @@ else
   echo "    flake.nix already matches \"$REAL_USER\", nothing to do."
 fi
 
-echo "==> Step 4: first darwin-rebuild switch (pinned to nix-darwin-26.05)"
-# darwin-rebuild doesn't exist yet on a fresh machine, so run it straight
-# from the flake this once. After this, rebuild.sh works normally.
-# This fetches the darwin-rebuild tool from the nix-darwin-26.05 release branch,
-# not the exact flake.lock revision. The system config it applies is still pinned
-# by this repo's flake.lock.
+echo "==> Step 5: first switch (pinned to the 26.05 release branches)"
+# The rebuild tool doesn't exist yet on a fresh machine, so run it straight
+# from its upstream flake this once. After this, rebuild.sh works normally.
+# The system config applied is still pinned by this repo's flake.lock.
 # sudo resets PATH to a secure default that excludes /nix/.../bin, so a
 # freshly installed `nix` would not be found under sudo even though it's
 # on PATH here. Resolve the absolute path first and invoke that instead.
 NIX_BIN="$(command -v nix)"
-# "mac" is the flake host label - if you renamed it, change it in flake.nix
-# and rebuild.sh too.
-sudo "$NIX_BIN" run github:nix-darwin/nix-darwin/nix-darwin-26.05#darwin-rebuild -- \
-  switch --flake ~/.dotfiles#mac
+case "$OS" in
+  Darwin)
+    # "mac" is the flake host label - if you renamed it, change it in flake.nix
+    # and rebuild.sh too.
+    sudo "$NIX_BIN" run github:nix-darwin/nix-darwin/nix-darwin-26.05#darwin-rebuild -- \
+      switch --flake ~/.dotfiles#mac
+    ;;
+  Linux)
+    # No sudo: home-manager standalone manages the user profile only.
+    # "linux" is the flake host label - if you renamed it, change it in flake.nix
+    # and rebuild.sh too.
+    "$NIX_BIN" run github:nix-community/home-manager/release-26.05#home-manager -- \
+      switch --flake ~/.dotfiles#linux
+    ;;
+  *)
+    echo "    Unsupported OS: $OS" >&2
+    exit 1
+    ;;
+esac
 # If this still fails with "nix: command not found", open a new terminal
 # (Determinate adds nix to new shells' PATH) and re-run ./bootstrap.sh.
 
