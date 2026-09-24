@@ -1,14 +1,16 @@
-{ config, pkgs, user, ... }:
+{ config, pkgs, lib, user, herdrPkgs, homeManagerPkg ? null, ... }:
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
+  isLinux = pkgs.stdenv.isLinux;
 in
 
 {
   home.username = user;
-  home.homeDirectory = "/Users/${user}";
+  home.homeDirectory =
+    if pkgs.stdenv.isDarwin then "/Users/${user}" else "/home/${user}";
   home.stateVersion = "24.11";
-  home.packages = with pkgs; [
+  home.packages = (with pkgs; [
     # cli i use constantly
     ripgrep   # fast search
     fd        # fast find
@@ -18,7 +20,14 @@ in
     neovim
     # the font everything renders in
     nerd-fonts.hack
-  ];
+  ]) ++ [
+    # Herdr, from its own flake (same source on Mac and Linux).
+    herdrPkgs.${pkgs.system}.default
+  ] ++ lib.optionals isLinux (with pkgs; [
+    # On macOS these two come from Homebrew casks instead.
+    wezterm
+    claude-code
+  ]) ++ lib.optional (homeManagerPkg != null) homeManagerPkg;
   fonts.fontconfig.enable = true;
   home.sessionVariables.EDITOR = "nvim";
 

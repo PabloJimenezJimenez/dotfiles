@@ -34,9 +34,9 @@
     onActivation.cleanup = "zap";  # remove anything not listed here
     onActivation.autoUpdate = true;
     onActivation.extraFlags = [ "--force" ];
-    brews = [
-      "herdr"
-    ];
+    # Herdr now comes from the flake input (see flake.nix / home.nix), not brew.
+    # First switch after this change: `zap` removes the brew herdr, Nix takes over.
+    brews = [];
     casks = [
       "wezterm"
       "claude-code"

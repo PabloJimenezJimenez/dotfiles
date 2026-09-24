@@ -12,12 +12,16 @@
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     nix-homebrew.url = "github:zhaofengli/nix-homebrew";
+
+    # Herdr ships its own flake; pin a release tag, not master.
+    # Same source on Mac and Linux. Update with `nix flake update herdr`.
+    herdr.url = "github:herdrdev/herdr/v0.9.1";
   };
 
-  outputs = inputs@{ self, nix-darwin, nix-homebrew, home-manager, nixpkgs }:
+  outputs = inputs@{ self, nix-darwin, nix-homebrew, home-manager, nixpkgs, herdr }:
     let
       # The one username line to change if this isn't your machine.
-      # bootstrap.sh offers to rewrite this for you if your macOS username differs.
+      # bootstrap.sh offers to rewrite this for you if your username differs.
       user = "kunchen";
     in
     {
@@ -30,7 +34,10 @@
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
-            home-manager.extraSpecialArgs = { inherit user; };
+            home-manager.extraSpecialArgs = {
+              inherit user;
+              herdrPkgs = herdr.packages;
+            };
             home-manager.users.${user} = import ./home.nix;
           }
         ];
