@@ -23,6 +23,8 @@
       # The one username line to change if this isn't your machine.
       # bootstrap.sh offers to rewrite this for you if your username differs.
       user = "kunchen";
+      # CPU/OS for the Linux home-manager output. Use "aarch64-linux" on ARM.
+      linuxSystem = "x86_64-linux";
     in
     {
       darwinConfigurations."mac" = nix-darwin.lib.darwinSystem {
@@ -41,6 +43,21 @@
             home-manager.users.${user} = import ./home.nix;
           }
         ];
+      };
+
+      # Non-NixOS Linux (Ubuntu/WSL): home-manager standalone.
+      # No nix-darwin and no system-level config here - see configuration.nix.
+      homeConfigurations."linux" = home-manager.lib.homeManagerConfiguration {
+        pkgs = import nixpkgs {
+          system = linuxSystem;
+          config.allowUnfree = true; # match configuration.nix on Mac
+        };
+        extraSpecialArgs = {
+          inherit user;
+          herdrPkgs = herdr.packages;
+          homeManagerPkg = home-manager.packages.${linuxSystem}.default;
+        };
+        modules = [ ./home.nix ];
       };
     };
 }
